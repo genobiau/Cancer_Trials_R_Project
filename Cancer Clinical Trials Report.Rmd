@@ -1,0 +1,1633 @@
+---
+title: "Cancer Clinical Trials 2020-2024 Report"
+author: "by Gen"
+date: "2026-10-15"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE
+)
+
+# Load libraries
+library(tidyverse)
+library(stringr)
+library(lubridate)
+library(broom)
+library(knitr)
+
+
+# Step 1 Load Dataset
+
+cancer_trials <- read_csv(
+  "cancer_trials_2020_2024.csv",
+  show_col_types = FALSE
+)
+
+#Data Checks
+
+# View column names
+names(cancer_trials)
+
+# View structure
+str(cancer_trials)
+
+# View first rows
+head(cancer_trials)
+
+# Number of rows and columns
+dim(cancer_trials)
+
+
+#Missing Data
+
+missing_values <- cancer_trials %>%
+  summarise(
+    across(
+      everything(),
+      ~ sum(is.na(.x))
+    )
+  )
+
+missing_values
+
+
+#Duplicate Data
+
+duplicate_summary <- cancer_trials %>%
+  summarise(
+    duplicate_rows = sum(duplicated(.))
+  )
+
+duplicate_summary
+
+
+#Standardise Duration_Days
+
+cancer_trials <- cancer_trials %>%
+  mutate(
+    # Convert dates to character first
+    start_date = as.character(start_date),
+    completion_date = as.character(completion_date),
+
+    # Add first day of month when only YYYY-MM is supplied
+    start_date = if_else(
+      str_detect(start_date, "^\\d{4}-\\d{2}$"),
+      paste0(start_date, "-01"),
+      start_date
+    ),
+
+    completion_date = if_else(
+      str_detect(completion_date, "^\\d{4}-\\d{2}$"),
+      paste0(completion_date, "-01"),
+      completion_date
+    ),
+
+    # Convert to R Date format
+    start_date = ymd(start_date),
+    completion_date = ymd(completion_date),
+
+    # Calculate duration
+    duration_days = as.numeric(
+      completion_date - start_date
+    )
+  )
+
+
+# Check duration
+summary(cancer_trials$duration_days)
+
+
+#Zero-Days in DUration Check
+
+zero_duration_trials <- cancer_trials %>%
+  filter(duration_days == 0)
+
+nrow(zero_duration_trials)
+
+# Remove zero-day trials while KEEPING NA duration rows
+cancer_trials <- cancer_trials %>%
+  filter(is.na(duration_days) | duration_days > 0)
+
+nrow(cancer_trials)
+
+
+#Standardise Clinical Trial Phases
+
+cancer_trials <- cancer_trials %>%
+  mutate(
+    phase_standardised = case_when(
+
+      # NA or blank = phase not required
+      is.na(phase) ~ "Phase Not Required",
+
+      str_trim(phase) == "" ~ "Phase Not Required",
+
+      # Phase IV checked first
+      str_detect(
+        str_to_upper(phase),
+        "PHASE ?4|PHASE IV"
+      ) ~ "Phase IV",
+
+      # Phase III checked before Phase II
+      str_detect(
+        str_to_upper(phase),
+        "PHASE ?3|PHASE III"
+      ) ~ "Phase III",
+
+      # Phase II checked before Phase I
+      str_detect(
+        str_to_upper(phase),
+        "PHASE ?2|PHASE II"
+      ) ~ "Phase II",
+
+      str_detect(
+        str_to_upper(phase),
+        "EARLY_PHASE1|EARLY PHASE 1"
+      ) ~ "Phase I",
+
+      str_detect(
+        str_to_upper(phase),
+        "PHASE ?1|PHASE I"
+      ) ~ "Phase I",
+
+      str_detect(
+        str_to_upper(phase),
+        "NOT SPECIFIED"
+      ) ~ "Not Specified",
+
+      str_detect(
+        str_to_upper(phase),
+        "NOT REQUIRED|RX NOT REQUIRED"
+      ) ~ "Phase Not Required",
+
+      TRUE ~ "Not Specified"
+    )
+  )
+
+
+#Phase Frequency Table
+
+phase_frequency <- cancer_trials %>%
+  count(
+    phase_standardised,
+    name = "Frequency"
+  ) %>%
+  mutate(
+    Percentage = round(
+      Frequency / sum(Frequency) * 100,
+      2
+    )
+  ) %>%
+  arrange(
+    match(
+      phase_standardised,
+      c(
+        "Phase I",
+        "Phase II",
+        "Phase III",
+        "Phase IV",
+        "Not Specified",
+        "Phase Not Required"
+      )
+    )
+  )
+
+phase_frequency
+
+kable(
+  phase_frequency,
+  caption = "Frequency Distribution of Clinical Trial Phases"
+)
+
+
+#Standardise Intervention
+
+cancer_trials <- cancer_trials %>%
+  mutate(
+
+    intervention_standardised = case_when(
+
+      # Missing or blank values
+      is.na(intervention_types) |
+        str_trim(intervention_types) == "" ~
+        "Intervention Not Specified",
+
+      # Multiple interventions
+      str_detect(
+        intervention_types,
+        "[,;|]"
+      ) ~ "Multiple Interventions",
+
+      # Individual categories
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "DRUG" ~ "Drug",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "BIOLOGICAL" ~ "Biological",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "PROCEDURE" ~ "Procedure",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "DEVICE" ~ "Device",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "RADIATION" ~ "Radiation",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) %in%
+        c("BEHAVIORAL", "BEHAVIOURAL") ~
+        "Behavioural",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "DIAGNOSTIC_TEST" ~
+        "Diagnostic Test",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "DIETARY_SUPPLEMENT" ~
+        "Dietary Supplement",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "GENETIC" ~ "Genetic",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) %in%
+        c(
+          "COMBINATION_PRODUCT",
+          "COMBINATION_PRODUCTS"
+        ) ~
+        "Combination Product",
+
+      str_to_upper(
+        str_trim(intervention_types)
+      ) == "OTHER" ~ "Other",
+
+      TRUE ~ "Unclassified"
+    )
+  )
+
+
+#Intervention Frequency Table
+
+intervention_frequency <- cancer_trials %>%
+  count(
+    intervention_standardised,
+    name = "Frequency"
+  ) %>%
+  mutate(
+    Percentage = round(
+      Frequency / sum(Frequency) * 100,
+      2
+    )
+  ) %>%
+  arrange(desc(Frequency))
+
+intervention_frequency
+
+kable(
+  intervention_frequency,
+  caption = "Frequency Distribution of Intervention Types"
+)
+
+
+#Standardise Conditions
+
+cancer_trials <- cancer_trials %>%
+  mutate(
+
+    condition_standardised = case_when(
+
+      # Missing/blank condition
+      is.na(conditions) |
+        str_trim(conditions) == "" ~
+        "Unspecified Cancer",
+
+      # Multiple cancers
+      str_detect(
+        conditions,
+        "[,;|]"
+      ) ~ "Multiple Cancers",
+
+      # Haematological cancers
+      str_detect(
+        str_to_lower(conditions),
+        paste0(
+          "leukemia|leukaemia|lymphoma|",
+          "myeloma|hematolog|haematolog"
+        )
+      ) ~ "Haematological Cancers",
+
+      # Brain/CNS cancers
+      str_detect(
+        str_to_lower(conditions),
+        paste0(
+          "brain|glioblastoma|glioma|",
+          "central nervous system|cns|",
+          "medulloblastoma"
+        )
+      ) ~ "Brain and CNS Cancers",
+
+      # Skin / soft tissue / bone
+      str_detect(
+        str_to_lower(conditions),
+        paste0(
+          "melanoma|skin|sarcoma|",
+          "bone cancer|osteosarcoma|",
+          "soft tissue"
+        )
+      ) ~
+        "Skin, Soft Tissue and Bone Cancers",
+
+      # Major organ cancers
+      str_detect(
+        str_to_lower(conditions),
+        paste0(
+          "breast|lung|prostate|",
+          "colorectal|colon|rectal|",
+          "pancrea|liver|hepatic|",
+          "kidney|renal|ovarian|",
+          "cervical|bladder|gastric|",
+          "stomach|thyroid|",
+          "endometrial|uterine|",
+          "oesophag|esophag|",
+          "head and neck|oral|testicular"
+        )
+      ) ~ "Organ Cancers",
+
+      TRUE ~ "Unspecified Cancer"
+    )
+  )
+
+
+#Enrollment data checks
+
+enrollment_summary <- cancer_trials %>%
+  summarise(
+    Mean = round(
+      mean(enrollment, na.rm = TRUE),
+      2
+    ),
+
+    Median = median(
+      enrollment,
+      na.rm = TRUE
+    ),
+
+    Mode = as.numeric(
+      names(
+        sort(
+          table(enrollment),
+          decreasing = TRUE
+        )[1]
+      )
+    ),
+
+    Minimum = min(
+      enrollment,
+      na.rm = TRUE
+    ),
+
+    Maximum = max(
+      enrollment,
+      na.rm = TRUE
+    ),
+
+    SD = round(
+      sd(enrollment, na.rm = TRUE),
+      2
+    ),
+
+    Q1 = as.numeric(
+      quantile(
+        enrollment,
+        0.25,
+        na.rm = TRUE
+      )
+    ),
+
+    Q3 = as.numeric(
+      quantile(
+        enrollment,
+        0.75,
+        na.rm = TRUE
+      )
+    ),
+
+    IQR = IQR(
+      enrollment,
+      na.rm = TRUE
+    )
+  )
+
+enrollment_summary
+
+
+# Convert to long table
+enrollment_table <- enrollment_summary %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Statistic",
+    values_to = "Enrollment"
+  )
+
+kable(
+  enrollment_table,
+  caption = "Descriptive Statistics for Clinical Trial Enrollment"
+)
+
+
+#Enrollment Outliers
+
+Q1_enrollment <- quantile(
+  cancer_trials$enrollment,
+  0.25,
+  na.rm = TRUE
+)
+
+Q3_enrollment <- quantile(
+  cancer_trials$enrollment,
+  0.75,
+  na.rm = TRUE
+)
+
+IQR_enrollment <- (
+  Q3_enrollment - Q1_enrollment
+)
+
+lower_enrollment <- (
+  Q1_enrollment -
+    1.5 * IQR_enrollment
+)
+
+upper_enrollment <- (
+  Q3_enrollment +
+    1.5 * IQR_enrollment
+)
+
+
+enrollment_outliers <- cancer_trials %>%
+  summarise(
+
+    Total_Trials = n(),
+
+    Valid_Enrollment =
+      sum(!is.na(enrollment)),
+
+    Lower_Outliers =
+      sum(
+        enrollment < lower_enrollment,
+        na.rm = TRUE
+      ),
+
+    Upper_Outliers =
+      sum(
+        enrollment > upper_enrollment,
+        na.rm = TRUE
+      )
+  ) %>%
+  mutate(
+
+    Total_Outliers =
+      Lower_Outliers + Upper_Outliers,
+
+    Percentage = round(
+      Total_Outliers /
+        Valid_Enrollment * 100,
+      2
+    )
+  )
+
+enrollment_outliers
+
+
+#Enrollment Outlier Table
+
+outlier_table <- tibble(
+
+  Statistic = c(
+    "Total clinical trials",
+    "Valid enrollment observations",
+    "Potential enrollment outliers",
+    "Percentage of valid observations",
+    "Lower outlier threshold",
+    "Upper outlier threshold"
+  ),
+
+  Result = c(
+
+    format(
+      nrow(cancer_trials),
+      big.mark = ","
+    ),
+
+    format(
+      sum(!is.na(cancer_trials$enrollment)),
+      big.mark = ","
+    ),
+
+    format(
+      enrollment_outliers$Total_Outliers,
+      big.mark = ","
+    ),
+
+    paste0(
+      enrollment_outliers$Percentage,
+      "%"
+    ),
+
+    round(
+      lower_enrollment,
+      1
+    ),
+
+    round(
+      upper_enrollment,
+      1
+    )
+  )
+)
+
+kable(
+  outlier_table,
+  caption = "Enrollment Outlier Analysis"
+)
+
+
+#Enrollment Boxplot
+
+ggplot(
+  cancer_trials,
+  aes(
+    x = "Clinical Trials",
+    y = enrollment
+  )
+) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(
+    title = "Distribution of Clinical Trial Enrollment",
+    subtitle = "Enrollment shown on a logarithmic scale",
+    x = "",
+    y = "Enrollment (Log10 Scale)"
+  ) +
+  theme_minimal()
+
+
+#Duration Data Checks
+
+duration_summary <- cancer_trials %>%
+  summarise(
+
+    Mean = round(
+      mean(duration_days, na.rm = TRUE),
+      2
+    ),
+
+    Median = median(
+      duration_days,
+      na.rm = TRUE
+    ),
+
+    Mode = as.numeric(
+      names(
+        sort(
+          table(duration_days),
+          decreasing = TRUE
+        )[1]
+      )
+    ),
+
+    Minimum = min(
+      duration_days,
+      na.rm = TRUE
+    ),
+
+    Maximum = max(
+      duration_days,
+      na.rm = TRUE
+    ),
+
+    SD = round(
+      sd(duration_days, na.rm = TRUE),
+      2
+    ),
+
+    Q1 = as.numeric(
+      quantile(
+        duration_days,
+        0.25,
+        na.rm = TRUE
+      )
+    ),
+
+    Q3 = as.numeric(
+      quantile(
+        duration_days,
+        0.75,
+        na.rm = TRUE
+      )
+    ),
+
+    IQR = IQR(
+      duration_days,
+      na.rm = TRUE
+    )
+  )
+
+duration_summary
+
+
+# Convert to long format
+duration_table <- duration_summary %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Statistic",
+    values_to = "Duration_Days"
+  )
+
+kable(
+  duration_table,
+  caption = "Descriptive Statistics for Trial Duration"
+)
+
+
+#Duration Outliers
+
+Q1_duration <- quantile(
+  cancer_trials$duration_days,
+  0.25,
+  na.rm = TRUE
+)
+
+Q3_duration <- quantile(
+  cancer_trials$duration_days,
+  0.75,
+  na.rm = TRUE
+)
+
+IQR_duration <- (
+  Q3_duration -
+    Q1_duration
+)
+
+lower_duration <- (
+  Q1_duration -
+    1.5 * IQR_duration
+)
+
+upper_duration <- (
+  Q3_duration +
+    1.5 * IQR_duration
+)
+
+
+duration_outliers <- cancer_trials %>%
+  summarise(
+
+    Total_Trials = n(),
+
+    Valid_Durations =
+      sum(!is.na(duration_days)),
+
+    Lower_Outliers =
+      sum(
+        duration_days <
+          lower_duration,
+        na.rm = TRUE
+      ),
+
+    Upper_Outliers =
+      sum(
+        duration_days >
+          upper_duration,
+        na.rm = TRUE
+      )
+  ) %>%
+  mutate(
+
+    Total_Outliers =
+      Lower_Outliers +
+      Upper_Outliers,
+
+    Percentage =
+      round(
+        Total_Outliers /
+          Valid_Durations * 100,
+        2
+      ),
+
+    Lower_Threshold =
+      as.numeric(
+        lower_duration
+      ),
+
+    Upper_Threshold =
+      as.numeric(
+        upper_duration
+      )
+  )
+
+duration_outliers
+
+
+duration_outliers_table <-
+  duration_outliers %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Statistic",
+    values_to = "Value"
+  )
+
+kable(
+  duration_outliers_table,
+  caption = "Trial Duration Outlier Analysis"
+)
+
+
+
+# Enrollment Outlier Comparison by Study Type
+
+outlier_comparison <- cancer_trials %>%
+  group_by(study_type) %>%
+  summarise(
+    Total_Trials = n(),
+    Mean = mean(enrollment, na.rm = TRUE),
+    Median = median(enrollment, na.rm = TRUE),
+    Q1 = as.numeric(quantile(enrollment, 0.25, na.rm = TRUE)),
+    Q3 = as.numeric(quantile(enrollment, 0.75, na.rm = TRUE)),
+    IQR = IQR(enrollment, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Upper_Bound = Q3 + 1.5 * IQR
+  ) %>%
+  left_join(
+    cancer_trials %>%
+      group_by(study_type) %>%
+      summarise(
+        Enrollment_Values = list(enrollment),
+        .groups = "drop"
+      ),
+    by = "study_type"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    Outliers = sum(
+      Enrollment_Values < Q1 - 1.5 * IQR |
+      Enrollment_Values > Upper_Bound,
+      na.rm = TRUE
+    ),
+    Outlier_Percentage = round(
+      100 * Outliers / sum(!is.na(Enrollment_Values)),
+      2
+    )
+  ) %>%
+  ungroup() %>%
+  select(-Enrollment_Values)
+
+outlier_comparison
+
+
+
+#Binomial Hypothesis Testing
+
+intervention_data <- cancer_trials %>%
+  filter(
+    intervention_standardised %in%
+      c(
+        "Drug",
+        "Device",
+        "Procedure"
+      )
+  )
+
+
+# Count each intervention
+intervention_counts <-
+  intervention_data %>%
+  count(
+    intervention_standardised,
+    name = "Count"
+  )
+
+intervention_counts
+
+
+# Counts
+drug_count <- intervention_counts %>%
+  filter(
+    intervention_standardised == "Drug"
+  ) %>%
+  pull(Count)
+
+device_count <- intervention_counts %>%
+  filter(
+    intervention_standardised == "Device"
+  ) %>%
+  pull(Count)
+
+procedure_count <- intervention_counts %>%
+  filter(
+    intervention_standardised == "Procedure"
+  ) %>%
+  pull(Count)
+
+
+other_count <-
+  device_count +
+  procedure_count
+
+
+# One-sided binomial test
+
+test_drug_combined <- binom.test(
+
+  x = drug_count,
+
+  n = drug_count +
+    other_count,
+
+  p = 0.5,
+
+  alternative = "greater"
+)
+
+
+test_drug_combined
+
+
+#Binomial Table
+
+binomial_table <- tibble(
+
+  Statistic = c(
+
+    "Statistical Test",
+
+    "Drug Interventions",
+
+    "Device Interventions",
+
+    "Procedure Interventions",
+
+    "Device + Procedure Interventions",
+
+    "Total Included Trials",
+
+    "Drug Proportion (%)",
+
+    "Device + Procedure Proportion (%)",
+
+    "Null Hypothesis Proportion",
+
+    "P-Value",
+
+    "95% Confidence Interval Lower Bound (%)",
+
+    "Significance Level",
+
+    "Hypothesis Decision"
+  ),
+
+  Result = c(
+
+    "One-sided Exact Binomial Test",
+
+    format(
+      drug_count,
+      big.mark = ","
+    ),
+
+    format(
+      device_count,
+      big.mark = ","
+    ),
+
+    format(
+      procedure_count,
+      big.mark = ","
+    ),
+
+    format(
+      other_count,
+      big.mark = ","
+    ),
+
+    format(
+      drug_count +
+        other_count,
+      big.mark = ","
+    ),
+
+    paste0(
+      round(
+        test_drug_combined$estimate *
+          100,
+        2
+      ),
+      "%"
+    ),
+
+    paste0(
+      round(
+        other_count /
+          (drug_count + other_count) *
+          100,
+        2
+      ),
+      "%"
+    ),
+
+    "50%",
+
+    format.pval(
+      test_drug_combined$p.value,
+      digits = 3,
+      eps = 0.001
+    ),
+
+    paste0(
+      round(
+        test_drug_combined$conf.int[1] *
+          100,
+        2
+      ),
+      "%"
+    ),
+
+    "0.05",
+
+    if_else(
+      test_drug_combined$p.value < 0.05,
+      "Reject Null Hypothesis",
+      "Fail to Reject Null Hypothesis"
+    )
+  )
+)
+
+kable(
+  binomial_table,
+  caption = "Binomial Hypothesis Test Results"
+)
+
+
+#Pearson Chi-Square Test
+
+chi_data <- cancer_trials %>%
+  filter(
+
+    intervention_standardised %in%
+      c(
+        "Drug",
+        "Device",
+        "Procedure"
+      ),
+
+    phase_standardised %in%
+      c(
+        "Phase I",
+        "Phase II",
+        "Phase III",
+        "Phase IV"
+      )
+  )
+
+
+# Contingency table
+
+chi_table <- table(
+
+  chi_data$intervention_standardised,
+
+  chi_data$phase_standardised
+)
+
+chi_table
+
+
+# Pearson Chi-square test
+
+chi_test <- chisq.test(
+  chi_table
+)
+
+chi_test
+
+
+# Expected frequencies
+
+minimum_expected <- min(
+  chi_test$expected
+)
+
+percent_below_five <- mean(
+  chi_test$expected < 5
+) * 100
+
+
+#Cramer's V Test
+
+cramers_v <- sqrt(
+
+  as.numeric(
+    chi_test$statistic
+  ) /
+
+    (
+      sum(chi_table) *
+
+        (
+          min(
+            dim(chi_table)
+          ) - 1
+        )
+    )
+)
+
+
+#Chi-Square Table
+
+chi_summary <- tibble(
+
+  Statistic = c(
+
+    "Pearson Chi-square Statistic",
+
+    "Degrees of Freedom",
+
+    "Total Observations",
+
+    "P-Value",
+
+    "Cramér's V",
+
+    "Minimum Expected Frequency",
+
+    "Expected Cells Below 5 (%)",
+
+    "Hypothesis Decision"
+  ),
+
+  Result = c(
+
+    round(
+      as.numeric(
+        chi_test$statistic
+      ),
+      2
+    ),
+
+    as.numeric(
+      chi_test$parameter
+    ),
+
+    sum(
+      chi_table
+    ),
+
+    format.pval(
+      chi_test$p.value,
+      digits = 3,
+      eps = 0.001
+    ),
+
+    round(
+      cramers_v,
+      3
+    ),
+
+    round(
+      minimum_expected,
+      2
+    ),
+
+    round(
+      percent_below_five,
+      2
+    ),
+
+    if_else(
+      chi_test$p.value < 0.05,
+      "Reject Null Hypothesis",
+      "Fail to Reject Null Hypothesis"
+    )
+  )
+)
+
+kable(
+  chi_summary,
+  caption = "Pearson Chi-square Test Results"
+)
+
+
+#Logistic Regression
+
+logistic_data <- cancer_trials %>%
+  filter(
+
+    intervention_standardised %in%
+      c(
+        "Drug",
+        "Device",
+        "Procedure"
+      ),
+
+    phase_standardised %in%
+      c(
+        "Phase I",
+        "Phase II",
+        "Phase III",
+        "Phase IV"
+      )
+  ) %>%
+
+  mutate(
+
+    Later_Phase = if_else(
+
+      phase_standardised %in%
+        c(
+          "Phase III",
+          "Phase IV"
+        ),
+
+      1L,
+
+      0L
+    ),
+
+    intervention_standardised =
+      factor(
+
+        intervention_standardised,
+
+        levels =
+          c(
+            "Drug",
+            "Device",
+            "Procedure"
+          )
+      )
+  )
+
+
+#Early vs Later Phase Counts
+
+logistic_counts <- logistic_data %>%
+  count(
+    intervention_standardised,
+    Later_Phase
+  ) %>%
+
+  pivot_wider(
+
+    names_from = Later_Phase,
+
+    values_from = n,
+
+    names_prefix = "Outcome_",
+
+    values_fill = 0
+  ) %>%
+
+  rename(
+
+    Early_Phase =
+      Outcome_0,
+
+    Later_Phase =
+      Outcome_1
+  ) %>%
+
+  mutate(
+
+    Total =
+      Early_Phase +
+      Later_Phase,
+
+    Later_Phase_Percentage =
+      round(
+        Later_Phase /
+          Total * 100,
+        2
+      )
+  )
+
+logistic_counts
+
+kable(
+  logistic_counts,
+  caption = "Early and Later Clinical Trial Phases by Intervention Type"
+)
+
+
+#Logistic Regression Model
+
+logistic_model <- glm(
+
+  Later_Phase ~
+    intervention_standardised,
+
+  data = logistic_data,
+
+  family =
+    binomial(
+      link = "logit"
+    )
+)
+
+
+summary(
+  logistic_model
+)
+
+
+#Logistic Regression Odds Ratio
+
+logistic_results <- broom::tidy(
+
+  logistic_model,
+
+  conf.int = TRUE,
+
+  exponentiate = TRUE
+
+) %>%
+
+  select(
+
+    term,
+
+    estimate,
+
+    conf.low,
+
+    conf.high,
+
+    p.value
+
+  ) %>%
+
+  rename(
+
+    Term = term,
+
+    Odds_Ratio = estimate,
+
+    CI_Lower_95 = conf.low,
+
+    CI_Upper_95 = conf.high,
+
+    P_Value = p.value
+  )
+
+logistic_results
+
+kable(
+  logistic_results,
+  digits = 3,
+  caption = "Logistic Regression Odds Ratios"
+)
+
+# Logistic Regression Comparison Table
+
+logistic_comparison <- logistic_results %>%
+  filter(Term != "(Intercept)") %>%
+  mutate(
+    Intervention = case_when(
+      str_detect(Term, "Device") ~ "Device vs Drug",
+      str_detect(Term, "Procedure") ~ "Procedure vs Drug",
+      TRUE ~ Term
+    ),
+    Odds_Ratio = round(Odds_Ratio, 2),
+    Confidence_Interval = paste0(
+      round(CI_Lower_95, 2),
+      " - ",
+      round(CI_Upper_95, 2)
+    ),
+    Significant = if_else(
+      P_Value < 0.05,
+      "Yes",
+      "No"
+    ),
+    Interpretation = if_else(
+      P_Value < 0.05,
+      "Statistically significant",
+      "Not statistically significant"
+    )
+  ) %>%
+  transmute(
+    Intervention,
+    Odds_Ratio,
+    Confidence_Interval,
+    P_Value,
+    Significant,
+    Interpretation
+  )
+
+logistic_comparison
+
+#Logistic Regression Model Fit Information
+
+model_fit <- tibble(
+
+  Statistic = c(
+
+    "Number of Observations",
+
+    "Null Deviance",
+
+    "Residual Deviance",
+
+    "AIC"
+  ),
+
+  Value = c(
+
+    nobs(
+      logistic_model
+    ),
+
+    logistic_model$null.deviance,
+
+    logistic_model$deviance,
+
+    AIC(
+      logistic_model
+    )
+  )
+)
+
+kable(
+  model_fit,
+  digits = 2,
+  caption = "Logistic Regression Model Fit"
+)
+
+```
+
+Cancer remains a significant global health challenge, driving continuous research into the development and evaluation of effective treatment interventions. Clinical trials play a fundamental role in this process by investigating the safety, efficacy, and clinical applications of pharmaceutical drugs, medical devices, and procedural interventions. Clinical research involves different stages of investigations. Phase I trials generally focus on safety, tolerability, and dosage. Phase II trials provide further evidence of safety, and preliminary efficacy. Phase III trials commonly evaluate treatment effectiveness, and safety in larger patient populations. Phase IV trials generally involve post marketing studies of approved cancer interventions. Clinical trial phase classifications are primarily associated with drug and biological product development, and may not be directly required or applicable to observational, device, or procedural clinical studies.
+
+The objectives of this study was to investigate the distribution of cancer clinical trials conducted between 2020 and 2024, with particular attention to intervention type, and clinical trial phase. The analysis seeked to determine whether pharmaceutical drug interventions were more frequently represented than device and procedural interventions, and whether intervention type was associated with classification in later clinical trial phases, particularly Phase III and Phase IV.
+
+The Cancer Clinical Trials 2020–2024 dataset was obtained from Kaggle and contains 10,000 clinical trial records, 14 variables and all completed cancer trial studies. The key features selected for this analysis include nct_id, study_type, phase, conditions, interventions, intervention_types, enrolment, start_date and completion_date. These variables were selected to evaluate clinical trial characteristics, intervention classifications, and clinical development phases, as well as to explore patterns and relationships between participant enrolment, and trial duration. The study applied descriptive statistics, exploratory data analysis, statistical binomial hypothesis testing, and logistic regression modelling.
+
+The Cancer Clinical Trials 2020-2024 dataset was reviewed, cleaned, transformed, and prepared prior to statistical analysis. In particular, there were 1,076 missing days within the dates for start_date, and 534 missing days within the dates for completion_date. These dates were imputed for the first day of the month. The start_date and completion_date variables were converted into duration_days, representing the length of days of each clinical trial. There were 9 observations that had the same start_date and completion_date, indicating that the trial did not commence or there were data quality issues with the date imputations. These 9 observations were removed from the dataset. As a result there were 9991 observations analysed in the dataset for this study. There were 2715 NA observations in the phase variable that were kept and changed to Not Required. The phases were standardised through aggregating into Phase I, Phase II, Phase III, Phase IV, Not Specified, and Not Required, using the later Phase to represent the study Phase. The intervention_studies were standardised through aggregating into Drug, Biological, Procedure, Device, Radiation, Behavioural, Diagnostic_Test, Dietary_Supplement, Genetic, Combination_Products, Other, and Multiple_Interventions, for more than one type of intervention category in the observations. There were 32 different categorical conditions that were standardised and aggregated into 6 categories: Organ Cancers, Haematological Cancers, Brain and CNS Cancers, Skin, Soft Tissue and Bone Cancers, Multiple Cancers, and Unspecified Cancers. There were 903 NA observations in the intervention_type, that were kept and changed to Not Required. There were 905 missing observations in interventions that were kept and changed to Not Required. There were no duplicates in the dataset. R programming language was utilised for the analysis, reporting, and visualisations for this study.
+
+Descriptive analysis focused on identifying the distributions of the Standardised Phases and Intervention Types, while also identifying the central tendencies for Enrolment and Duration_Days. The distribution of standardised clinical trial phases revealed that the largest proportion of studies were classified as Phase Not Required (27.25%, n=2713), followed by Phase Not Specified (26.03%, n= 2603), Phase II (23.48%, n=2346), and Phase I (15.29%, n=1528). In contrast, later stage clinical trials were less prevalent, with Phase III accounting for 6.67% (n=666) and Phase IV representing the smallest proportion at 1.37% (n=137).
+
+
+
+```{r phase-frequency-barplot, echo=FALSE, fig.width=7, fig.height=4.5, out.width="75%"}
+
+phase_frequency$phase_standardised <- factor(
+  phase_frequency$phase_standardised,
+  levels = c(
+    "Phase I",
+    "Phase II",
+    "Phase III",
+    "Phase IV",
+    "Not Specified",
+    "Phase Not Required"
+  )
+)
+
+ggplot(
+  phase_frequency,
+  aes(
+    x = phase_standardised,
+    y = Frequency
+  )
+) +
+  geom_col(
+    fill = "blue",
+    width = 0.55
+  ) +
+  geom_text(
+    aes(label = paste0(Frequency, " (", Percentage, "%)")),
+    vjust = -0.4,
+    size = 3
+  ) +
+  labs(
+    title = "Frequency Distribution of Clinical Trial Phases",
+    x = "Clinical Trial Phase",
+    y = "Number of Clinical Trials"
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 35, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8)
+  )
+
+```
+
+Figure 1.0 Bar Graph of Frequency Distribution for Standardised Phases in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records. 
+
+
+The distribution of standardised clinical trial interventions revealed that the largest proportion of studies were classified as Drug Interventions (32.90%, n=3287), followed by Multiple Interventions (16.92%, n=1691) and Other Interventions (12.47%, n=1246). Procedural Interventions accounted for 6.14% (n=613), and Device Interventions represented 4.69% (n=469).
+
+```{r intervention-frequency-barplot, echo=FALSE, fig.width=10, fig.height=6}
+
+ggplot(
+  intervention_frequency,
+  aes(
+    x = reorder(intervention_standardised, -Frequency),
+    y = Frequency
+  )
+) +
+  geom_col(fill = "blue", width = 0.7) +
+  geom_text(
+    aes(label = paste0(Frequency, " (", Percentage, "%)")),
+    vjust = -0.4,
+    size = 3.2
+  ) +
+  labs(
+    title = "Frequency Distribution of Intervention Types",
+    x = "Intervention Type",
+    y = "Number of Clinical Trials"
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 35, hjust = 1)
+  )
+
+```
+Figure 2.0 Bar Graph of Frequency Distribution for Standardised Intervention Types in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+
+
+Clinical trial enrolment distribution varied considerably across the dataset, ranging from a minimum of 1 participant to a maximum of 36,580,288 participants. The mean enrolment was 9260.02 participants, which was substantially higher than the median 66 participants, and mode 30 participants. The interquartile range (IQR) was 163 participants, indicating considerable variability within the middle 50% of observations. The enrolment variable was evaluated for potential outliers (13.1%, n=1305).
+
+```{r enrolment-table, echo=FALSE}
+knitr::kable(
+  enrollment_table,
+  col.names = c("Statistical Measure", "Enrolment"),
+  caption = "Measures of Central Tendency and Dispersion for Clinical Trial Enrolment",
+  digits = 2
+)
+```
+Figure 3.0 Table of Central Tendency and Dispersion Measurements for Enrolment in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+
+
+The clinical trial duration's distributions revealed considerable variability. The maximum participant duration was 15705 days and the minimum was 3 days. The mean trial duration was 1659.31 days, exceeding the median of 1294 days, and mode of 730 days. The interquartile range (IQR) was 1525.50 days, indicating a large variation in clinical trial durations among the middle 50% of observations. The clinical durations were evaluated for potential outliers (4.92%, n=492).
+
+```{r duration-table, echo=FALSE}
+knitr::kable(
+  duration_table,
+  col.names = c("Statistical Measure", "Duration (Days)"),
+  caption = "Measures of Central Tendency and Dispersion for Clinical Trial Duration",
+  digits = 2
+)
+```
+Figure 4.0 Table of Central Tendency and Dispersion Measurements for Duration (Days) in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+
+Exploratory Data Analysis was used to investigate any potential outliers in enrolment and duration. Outliers in enrolment were represented by positive skewing (mean = 9260.02, median = 66), indicating there were large clinical trial enrolments. Enrolment distribution was differentiated by study type. There were 7391 clinical trials enrolled as interventional, with mean 288.28, median 53, IQR 98, and outliers 910 (12.31%). There were 2600 clinical trials enrolled as observational, with mean 34763.93, median 170, IQR 467.75, and outliers 363 (13.96%). However, these outliers did not impact the objectives of the study. The enrolment outliers were not directly included in the statistical modelling of binomial hypothesis testing, Pearson Chi-square testing, or binary logistic regression modelling.
+
+```{r enrolment-outlier-comparison, echo=FALSE}
+
+knitr::kable(
+  outlier_comparison,
+  col.names = c(
+    "Study Type",
+    "Total Trials",
+    "Mean",
+    "Median",
+    "Q1",
+    "Q3",
+    "IQR",
+    "Upper Bound",
+    "Outliers",
+    "Outliers (%)"
+  ),
+  caption = "Enrolment Distribution and Potential Outliers by Clinical Trial Study Type",
+  digits = 2
+)
+
+```
+Figure 5.0 Enrolment Distribution of Potential Outliers by Study Type (n=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+
+Outliers in duration were represented by positive skewing (mean = 1659.31, median = 1294), indicating there were clinical trials with longer duration days. Outlier's analysis using Tukey’s fences (1.5 × IQR method) identified no potential lower outliers in duration, while 492 clinical trials (4.92%) were classified as potential upper threshold outliers. These findings indicate that extreme duration values were concentrated in the upper tail of the distribution. Outliers in duration were not directly included in the statistical modelling of binomial hypothesis testing, Pearson Chi-square testing, or binary logistic regression modelling.
+
+
+```{r duration-boxplot, echo=FALSE, fig.width=9, fig.height=5}
+
+ggplot(cancer_trials, aes(x = "Clinical Trials", y = duration_days)) +
+  geom_boxplot(
+    fill = "white",
+    colour = "black",
+    outlier.colour = "red",
+    outlier.shape = 16,
+    outlier.size = 1.8,
+    width = 0.4
+  ) +
+  geom_hline(
+    yintercept = 4479.25,
+    linetype = "dashed",
+    colour = "red"
+  ) +
+  annotate(
+    "text",
+    x = 1.35,
+    y = 4479.25,
+    label = "Upper threshold: 4479.25 days",
+    colour = "red",
+    size = 3.5,
+    hjust = 0
+  ) +
+  labs(
+    title = "Distribution of Clinical Trial Duration",
+    subtitle = "Potential Outliers Identified Using the 1.5 x IQR Method",
+    x = "",
+    y = "Clinical Trial Duration (Days)",
+    caption = "492 potential upper outliers (4.92% of 9,991 trials)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11)
+  )
+
+```
+Figure 6.0 Boxplot of Duration Distribution of Potential Outliers (n=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+
+
+A statistical one-sided binomial test was conducted to investigate whether Drug interventions were more frequently represented than Device and Procedure interventions combined. Out of the 4369 selected clinical trials, 3287 (75.23%) were classified as Drug interventions, compared with 1082 (24.77%) classified as combined Device or Procedure interventions.
+
+The observed Drug proportion was 0.7523, with a one-sided 95% confidence interval lower bound of 0.7414. The test demonstrated a statistically significant result (p < 0.001), indicating that the observed proportion of Drug interventions was significantly greater than the hypothesised proportion of 0.50. Therefore, the null hypothesis was rejected, providing strong statistical evidence that Drug interventions were more frequently represented than Device and Procedure interventions combined within the clinical trials dataset.
+
+```{r binomial-long-table, echo=FALSE}
+knitr::kable(
+  binomial_table,
+  col.names = c("Statistical Measure", "Result"),
+  caption = "One-Sided Binomial Hypothesis Test: Drug vs Device and Procedure Interventions"
+)
+```
+Figure 7.0 Statistical One-Sided Binomial Hypothesis Test
+
+
+A Pearson Chi-square Test of Independence was conducted to investigate the association between intervention type and clinical trial phase classification among 4369 selected clinical trials. The large chi-square statistics of χ² = 2727.04, and small p value (p <0.001), provided strong statistical evidence against the null hypothesis of independence and for a strong association between the categorical variables: intervention type, and clinical trial phase classifications.  Cramér's V further supported this strong association (V = 0.559).
+
+```{r chi-square-summary-table, echo=FALSE}
+knitr::kable(
+  chi_summary,
+  col.names = c("Statistical Measure", "Result"),
+  caption = "Pearson Chi-square Test of Independence and Cramér's V"
+)
+```
+Figure 8.0 Pearson Chi-Square Test of Independence and Cramer's V
+
+
+Binary logistic regression was conducted to investigate whether intervention type was associated with the odds of a clinical trial being classified as Phase III or Phase IV, compared with Phase I or Phase II. The analysis included 2962 clinical trials of Phases I–IV, using Drug interventions as the reference category.
+
+Device interventions demonstrated higher estimated odds of later-phase classification compared with Drug interventions (OR = 2.34, 95% CI: 0.96–5.72). However, this association was not statistically significant at the 5% significance level (p = 0.0624). The confidence interval included the null value of 1, indicating insufficient statistical evidence to establish a difference in odds between Device and Drug interventions.
+
+In contrast, Procedure interventions demonstrated significantly higher odds of later-phase classification compared with Drug interventions (OR = 4.13, 95% CI: 2.18–7.84, p < 0.001). The confidence interval excluded 1, supporting the finding of a statistically significant association. Specifically, Procedure interventions had approximately 4.13 times the odds of being classified as Phase III or IV compared with Drug interventions.
+
+Overall, the analysis identified statistically significant differences in later-phase classification between Procedure and Drug interventions, while the estimated difference between Device and Drug interventions did not reach statistical significance.
+
+
+```{r logistic-comparison-table, echo=FALSE}
+knitr::kable(
+  logistic_comparison,
+  col.names = c(
+    "Intervention",
+    "Odds Ratio",
+    "95% Confidence Interval",
+    "P-Value",
+    "Significant?",
+    "Interpretation"
+  ),
+  caption = "Logistic Regression: Odds Ratios and Statistical Significance"
+)
+```
+Figure 9.0 Logistic Regression Model for Intervention Types and Phases
+
+
+Conclusion
+
+The objective of this study was to investigate the distribution of cancer clinical trials conducted between 2020 and 2024, with particular emphasis on intervention type and clinical trial phase classification. The findings provided strong statistical evidence of an association between intervention type and clinical trial phase classification, indicating that the distribution of clinical phases differed significantly across Drug, Device and Procedure interventions. The analysis provided statistically significant evidence that Procedure interventions had higher odds of being classified in later clinical trial phases (Phases III and IV) compared with Drug interventions (OR = 4.13, p < 0.001). Although Device interventions also demonstrated higher estimated odds of later-phase classification (OR = 2.34), this association was not statistically significant (p = 0.0624).
+
+Furthermore, while Drug interventions were significantly more prevalent than Device and Procedure interventions combined in the overall Cancer Clinical Trials 2020-2024 dataset, the analysis did not establish that Drug interventions were more prevalent in the later clinical trial phases (Phases III and IV). Overall, these findings highlight the importance of distinguishing between statistical association and evidence of clinical trial progression. Although intervention type was significantly associated with phase classification, this association does not necessarily indicate that Drug interventions are more likely to advance into later stages of clinical development.
+
