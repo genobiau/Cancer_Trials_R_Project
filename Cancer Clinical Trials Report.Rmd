@@ -1385,12 +1385,14 @@ Cancer encompasses a heterogeneous group of diseases characterised by the uncont
 
 The objectives of this study was to investigate the distribution of cancer clinical trials conducted between 2020 and 2024, with particular attention to intervention type, and clinical trial phase. The analysis seeked to determine whether pharmaceutical drug interventions were more frequently represented than device and procedural interventions, and whether intervention type was associated with classification in later clinical trial phases, particularly Phase III and Phase IV.
 
-The Cancer Clinical Trials 2020–2024 dataset was obtained from Kaggle and contains 10,000 clinical trial records, 14 variables and all completed cancer trial studies. The key features selected for this analysis include nct_id, study_type, phase, conditions, interventions, intervention_types, enrolment, start_date and completion_date. These variables were selected to evaluate clinical trial characteristics, intervention classifications, and clinical development phases, as well as to explore patterns and relationships between participant enrolment, and trial duration. The study applied descriptive statistics, exploratory data analysis, statistical binomial hypothesis testing, and logistic regression modelling.
+The Cancer Clinical Trials 2020–2024 dataset was obtained from Kaggle and contains 10,000 clinical trial records, 14 variables and all completed cancer trial studies. The key features selected for this analysis include nct_id, study_type, phase, conditions, interventions, intervention_types, enrollment, start_date and completion_date. These variables were selected to evaluate clinical trial characteristics, intervention classifications, and clinical development phases, as well as to explore patterns and relationships between participant enrollment, and trial duration. The study applied descriptive statistics, exploratory data analysis, statistical binomial hypothesis testing, and logistic regression modelling.
 
 The Cancer Clinical Trials 2020-2024 dataset was reviewed, cleaned, transformed, and prepared prior to statistical analysis. In particular, there were 1,076 missing days within the dates for start_date, and 534 missing days within the dates for completion_date. These dates were imputed for the first day of the month. The start_date and completion_date variables were converted into duration_days, representing the length of days of each clinical trial. There were 9 observations that had the same start_date and completion_date, indicating that the trial did not commence or there were data quality issues with the date imputations. These 9 observations were removed from the dataset. As a result there were 9991 observations analysed in the dataset for this study. There were 2715 NA observations in the phase variable that were kept and changed to Not Required. The phases were standardised through aggregating into Phase I, Phase II, Phase III, Phase IV, Not Specified, and Not Required, using the later Phase to represent the study Phase. The intervention_studies were standardised through aggregating into Drug, Biological, Procedure, Device, Radiation, Behavioural, Diagnostic_Test, Dietary_Supplement, Genetic, Combination_Products, Other, and Multiple_Interventions, for more than one type of intervention category in the observations. There were 32 different categorical conditions that were standardised and aggregated into 6 categories: Organ Cancers, Haematological Cancers, Brain and CNS Cancers, Skin, Soft Tissue and Bone Cancers, Multiple Cancers, and Unspecified Cancers. There were 903 NA observations in the intervention_type, that were kept and changed to Not Required. There were 905 missing observations in interventions that were kept and changed to Not Required. There were no duplicates in the dataset. R programming language was utilised for the analysis, reporting, and visualisations for this study.
 
-Descriptive analysis focused on identifying the distributions of the Standardised Phases and Intervention Types, while also identifying the central tendencies for Enrolment and Duration_Days. The distribution of standardised clinical trial phases revealed that the largest proportion of studies were classified as Phase Not Required (27.25%, n=2713), followed by Phase Not Specified (26.03%, n= 2603), Phase II (23.48%, n=2346), and Phase I (15.29%, n=1528). In contrast, later stage clinical trials were less prevalent, with Phase III accounting for 6.67% (n=666) and Phase IV representing the smallest proportion at 1.37% (n=137).
+**Descriptive Data Analysis**
 
+
+Descriptive analysis focused on identifying the distributions of the Standardised Phases and Intervention Types, while also identifying the central tendencies for Enrollment and Duration_Days. The distribution of standardised clinical trial phases revealed that the largest proportion of studies were classified as Phase Not Required (27.25%, n=2713), followed by Phase Not Specified (26.03%, n= 2603), Phase II (23.48%, n=2346), and Phase I (15.29%, n=1528). In contrast, later stage clinical trials were less prevalent, with Phase III accounting for 6.67% (n=666) and Phase IV representing the smallest proportion at 1.37% (n=137).
 
 
 ```{r phase-frequency-barplot, echo=FALSE, fig.width=7, fig.height=4.5, out.width="75%"}
@@ -1478,7 +1480,7 @@ ggplot(
 Figure 2.0 Bar Graph of Frequency Distribution for Standardised Intervention Types in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
 
 
-Clinical trial enrolment distribution varied considerably across the dataset, ranging from a minimum of 1 participant to a maximum of 36,580,288 participants. The mean enrolment was 9260.02 participants, which was substantially higher than the median 66 participants, and mode 30 participants. The interquartile range (IQR) was 163 participants, indicating considerable variability within the middle 50% of observations. The enrolment variable was evaluated for potential outliers (13.1%, n=1305).
+Clinical trial enrollment distribution varied considerably across the dataset, ranging from a minimum of 1 participant to a maximum of 36,580,288 participants. The mean enrollment was 9260.02 participants, which was substantially higher than the median 66 participants, and mode 30 participants. The interquartile range (IQR) was 163 participants, indicating considerable variability within the middle 50% of observations. The enrollment variable was evaluated for potential outliers (13.1%, n=1305).
 
 ```{r enrolment-table, echo=FALSE}
 knitr::kable(
@@ -1488,7 +1490,7 @@ knitr::kable(
   digits = 2
 )
 ```
-Figure 3.0 Table of Central Tendency and Dispersion Measurements for Enrolment in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+Figure 3.0 Table of Central Tendency and Dispersion Measurements for Enrollment in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
 
 
 The clinical trial duration's distributions revealed considerable variability. The maximum participant duration was 15705 days and the minimum was 3 days. The mean trial duration was 1659.31 days, exceeding the median of 1294 days, and mode of 730 days. The interquartile range (IQR) was 1525.50 days, indicating a large variation in clinical trial durations among the middle 50% of observations. The clinical durations were evaluated for potential outliers (4.92%, n=492).
@@ -1503,9 +1505,12 @@ knitr::kable(
 ```
 Figure 4.0 Table of Central Tendency and Dispersion Measurements for Duration (Days) in Cancer Clinical Trials 2020-2024 (N=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
 
-Exploratory Data Analysis was used to investigate any potential outliers in enrolment and duration. Outliers in enrolment were represented by positive skewing (mean = 9260.02, median = 66), indicating there were large clinical trial enrolments. Enrolment distribution was differentiated by study type. There were 7391 clinical trials enrolled as interventional, with mean 288.28, median 53, IQR 98, and outliers 910 (12.31%). There were 2600 clinical trials enrolled as observational, with mean 34763.93, median 170, IQR 467.75, and outliers 363 (13.96%). However, these outliers did not impact the objectives of the study. The enrolment outliers were not directly included in the statistical modelling of binomial hypothesis testing, Pearson Chi-square testing, or binary logistic regression modelling.
+**Exploratory Data Analysis**
 
-```{r enrolment-outlier-comparison, echo=FALSE}
+
+Exploratory Data Analysis was used to investigate any potential outliers in enrollment and duration. Outliers in enrolment were represented by positive skewing (mean = 9260.02, median = 66), indicating there were large clinical trial enrollments. Enrollment distribution was differentiated by study type. There were 7391 clinical trials enrolled as interventional, with mean 288.28, median 53, IQR 98, and outliers 910 (12.31%). There were 2600 clinical trials enrolled as observational, with mean 34763.93, median 170, IQR 467.75, and outliers 363 (13.96%). However, these outliers did not impact the objectives of the study. The enrollment outliers were not directly included in the statistical modelling of binomial hypothesis testing, Pearson Chi-square testing, or binary logistic regression modelling.
+
+```{r enrollment-outlier-comparison, echo=FALSE}
 
 knitr::kable(
   outlier_comparison,
@@ -1521,12 +1526,12 @@ knitr::kable(
     "Outliers",
     "Outliers (%)"
   ),
-  caption = "Enrolment Distribution and Potential Outliers by Clinical Trial Study Type",
+  caption = "Enrollment Distribution and Potential Outliers by Clinical Trial Study Type",
   digits = 2
 )
 
 ```
-Figure 5.0 Enrolment Distribution of Potential Outliers by Study Type (n=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
+Figure 5.0 Enrollment Distribution of Potential Outliers by Study Type (n=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
 
 Outliers in duration were represented by positive skewing (mean = 1659.31, median = 1294), indicating there were clinical trials with longer duration days. Outlier's analysis using Tukey’s fences (1.5 × IQR method) identified no potential lower outliers in duration, while 492 clinical trials (4.92%) were classified as potential upper threshold outliers. These findings indicate that extreme duration values were concentrated in the upper tail of the distribution. Outliers in duration were not directly included in the statistical modelling of binomial hypothesis testing, Pearson Chi-square testing, or binary logistic regression modelling.
 
@@ -1572,6 +1577,8 @@ ggplot(cancer_trials, aes(x = "Clinical Trials", y = duration_days)) +
 ```
 Figure 6.0 Boxplot of Duration Distribution of Potential Outliers (n=9991). 9 zero-day duration observations were excluded from the original 10,000 records.
 
+**Statistical One-Sided Binomial Hypothesis Test**
+
 
 A statistical one-sided binomial test was conducted to investigate whether Drug interventions were more frequently represented than Device and Procedure interventions combined. Out of the 4369 selected clinical trials, 3287 (75.23%) were classified as Drug interventions, compared with 1082 (24.77%) classified as combined Device or Procedure interventions.
 
@@ -1586,6 +1593,8 @@ knitr::kable(
 ```
 Figure 7.0 Statistical One-Sided Binomial Hypothesis Test
 
+**Pearson Chi-Square Test of Independence**
+
 
 A Pearson Chi-square Test of Independence was conducted to investigate the association between intervention type and clinical trial phase classification among 4369 selected clinical trials. The large chi-square statistics of χ² = 2727.04, and small p value (p <0.001), provided strong statistical evidence against the null hypothesis of independence and for a strong association between the categorical variables: intervention type, and clinical trial phase classifications.  Cramér's V further supported this strong association (V = 0.559).
 
@@ -1597,6 +1606,8 @@ knitr::kable(
 )
 ```
 Figure 8.0 Pearson Chi-Square Test of Independence and Cramer's V
+
+**Binary Logistic Regression Modelling**
 
 
 Binary logistic regression was conducted to investigate whether intervention type was associated with the odds of a clinical trial being classified as Phase III or Phase IV, compared with Phase I or Phase II. The analysis included 2962 clinical trials of Phases I–IV, using Drug interventions as the reference category.
@@ -1625,12 +1636,12 @@ knitr::kable(
 Figure 9.0 Logistic Regression Model for Intervention Types and Phases
 
 
-Conclusion
+**Conclusion**
 
 The objective of this study was to investigate the distribution of cancer clinical trials conducted between 2020 and 2024, with particular emphasis on intervention type and clinical trial phase classification. The findings provided strong statistical evidence of an association between intervention type and clinical trial phase classification, indicating that the distribution of clinical phases differed significantly across Drug, Device and Procedure interventions. The analysis provided statistically significant evidence that Procedure interventions had higher odds of being classified in later clinical trial phases (Phases III and IV) compared with Drug interventions (OR = 4.13, p < 0.001). Although Device interventions also demonstrated higher estimated odds of later-phase classification (OR = 2.34), this association was not statistically significant (p = 0.0624).
 
 Furthermore, while Drug interventions were significantly more prevalent than Device and Procedure interventions combined in the overall Cancer Clinical Trials 2020-2024 dataset, the analysis did not establish that Drug interventions were more prevalent in the later clinical trial phases (Phases III and IV). Overall, these findings highlight the importance of distinguishing between statistical association and evidence of clinical trial progression. Although intervention type was significantly associated with phase classification, this association does not necessarily indicate that Drug interventions are more likely to advance into later stages of clinical development.
 
-References
+**References**
 
 National Cancer Institute. (2026.). What is cancer? U.S. Department of Health and Human Services. https://www.cancer.gov/about-cancer/understanding/what-is-cancer
